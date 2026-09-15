@@ -28,6 +28,20 @@ final class TerminalProgressBarView: ProgressBarBaseView {
     private var state: Terminal.ProgressReportState = .remove
     private var progress: UInt8?
 
+    /// Color for the running states, or `nil` for the platform accent color.
+    /// The error and paused states keep their system colors either way.
+    var tint: ProgressBarColor? {
+        didSet {
+            guard tint != oldValue else { return }
+            applyColors()
+        }
+    }
+
+    /// The color the bar is painted with right now.
+    var barColor: CGColor? {
+        barLayer.backgroundColor
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         commonInit()
@@ -81,10 +95,14 @@ final class TerminalProgressBarView: ProgressBarBaseView {
             return
         }
 
+        applyColors()
+        updateForCurrentState(animated: true)
+    }
+
+    private func applyColors() {
         let color = color(for: state)
         barLayer.backgroundColor = color.cgColor
         trackLayer.backgroundColor = color.withAlphaComponent(0.3).cgColor
-        updateForCurrentState(animated: true)
     }
 
     private func updateForCurrentState(animated: Bool) {
@@ -144,13 +162,16 @@ final class TerminalProgressBarView: ProgressBarBaseView {
         barLayer.removeAnimation(forKey: indeterminateAnimationKey)
     }
 
-    private func color(for state: Terminal.ProgressReportState) -> ProgressBarColor {
+    func color(for state: Terminal.ProgressReportState) -> ProgressBarColor {
         switch state {
         case .error:
             return .systemRed
         case .pause:
             return .systemOrange
         default:
+            if let tint {
+                return tint
+            }
             #if os(macOS)
             return .controlAccentColor
             #else
