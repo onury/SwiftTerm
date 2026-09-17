@@ -68,6 +68,13 @@ public protocol LocalProcessTerminalViewDelegate: AnyObject {
     /// See ``TerminalViewDelegate/notification(source:title:body:)``.
     func notification(source: TerminalView, title: String, body: String)
 
+    /// Invoked when the terminal rings the bell (BEL), subject to the view's
+    /// `bellStyle`. The default beeps, as the view did before this seam
+    /// existed; a host that shows the bell some other way overrides it.
+    ///
+    /// See ``TerminalViewDelegate/bell(source:)``.
+    func bell(source: TerminalView)
+
     // MARK: Kitty clipboard protocol, OSC 5522
     //
     // ``LocalProcessTerminalView`` is its own ``TerminalViewDelegate``, so the
@@ -115,6 +122,8 @@ public extension LocalProcessTerminalViewDelegate {
     func progressReport(source: TerminalView, report: Terminal.ProgressReport) {}
 
     func notification(source: TerminalView, title: String, body: String) {}
+
+    func bell(source: TerminalView) { NSSound.beep() }
 
     func kittyClipboardCapabilities(source: TerminalView) -> KittyClipboardCapabilities {
         []
@@ -380,6 +389,10 @@ open class LocalProcessTerminalView: TerminalView, TerminalViewDelegate {
 
     open func notification(source: TerminalView, title: String, body: String) {
         processDelegate?.notification(source: source, title: title, body: body)
+    }
+
+    open func bell(source: TerminalView) {
+        processDelegate?.bell(source: source)
     }
 
     // MARK: Kitty clipboard protocol, forwarded to the processDelegate
