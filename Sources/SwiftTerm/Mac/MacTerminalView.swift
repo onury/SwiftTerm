@@ -492,6 +492,8 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
     private var markedTextOverlay: DictationOverlayTextView?
     private var progressBarView: TerminalProgressBarView?
     private var progressReportTimer: Timer?
+    /// The report the bar is on, or would be on if ``showsProgressBar`` let it.
+    private var liveProgressReport: Terminal.ProgressReport?
     private enum UIShutdownState {
         case active
         case stopping
@@ -1087,7 +1089,7 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
     /// a wait that is already running.
     public var progressReportTimeout: TimeInterval? = TerminalView.defaultProgressReportTimeout {
         didSet {
-            guard progressBarView?.isHidden == false else { return }
+            guard liveProgressReport != nil else { return }
             resetProgressReportTimer()
         }
     }
@@ -1108,7 +1110,8 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
     private func clearProgressReport() {
         progressReportTimer?.invalidate()
         progressReportTimer = nil
-        progressBarView?.apply(state: .remove, progress: nil)
+        liveProgressReport = nil
+        syncProgressBar()
     }
 
     @MainActor
@@ -1116,10 +1119,23 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
         if report.state == .remove {
             clearProgressReport()
         } else {
-            progressBarView?.apply(state: report.state, progress: report.progress)
+            liveProgressReport = report
+            syncProgressBar()
             resetProgressReportTimer()
         }
         terminalDelegate?.progressReport(source: self, report: report)
+    }
+
+    /// Brings the bar in line with the live report and ``showsProgressBar`` —
+    /// the one place either of them reaches the bar view, so a host that turns
+    /// the bar off cannot be talked back into it by the next report.
+    @MainActor
+    private func syncProgressBar() {
+        guard showsProgressBar, let liveProgressReport else {
+            progressBarView?.apply(state: .remove, progress: nil)
+            return
+        }
+        progressBarView?.apply(state: liveProgressReport.state, progress: liveProgressReport.progress)
     }
 
     /// Ends a bar the application started and never removed.
@@ -1353,6 +1369,20 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
     public var progressBarColor: NSColor? {
         get { progressBarView?.tint }
         set { progressBarView?.tint = newValue }
+    }
+
+    /// Controls whether the view draws the OSC 9;4 progress bar itself.
+    ///
+    /// The reports reach ``TerminalViewDelegate/progressReport(source:report:)``
+    /// either way, so a host that draws progress in its own chrome turns the
+    /// built-in bar off without losing what it draws from. While this is
+    /// `false` no report brings the bar back; setting it to `true` again
+    /// restores it, and a report still live comes back with it.
+    public var showsProgressBar: Bool = true {
+        didSet {
+            guard showsProgressBar != oldValue else { return }
+            syncProgressBar()
+        }
     }
 
     var _selectedTextBackgroundColor = NSColor(srgbRed: 0, green: 166.0 / 255.0, blue: 178.0 / 255.0, alpha: 1.0)

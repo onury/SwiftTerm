@@ -334,6 +334,8 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     var _lineSpacing: CGFloat = 1.0
     var terminal: Terminal!
     private var progressBarView: TerminalProgressBarView?
+    /// The report the bar is on, or would be on if ``showsProgressBar`` let it.
+    private var liveProgressReport: Terminal.ProgressReport?
     private var progressReportTimer: Timer?
     
     /// Tracks the selection state of the terminal, and can be used to set it
@@ -632,7 +634,7 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     /// a wait that is already running.
     public var progressReportTimeout: TimeInterval? = TerminalView.defaultProgressReportTimeout {
         didSet {
-            guard progressBarView?.isHidden == false else { return }
+            guard liveProgressReport != nil else { return }
             resetProgressReportTimer()
         }
     }
@@ -651,17 +653,30 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     private func clearProgressReport() {
         progressReportTimer?.invalidate()
         progressReportTimer = nil
-        progressBarView?.apply(state: .remove, progress: nil)
+        liveProgressReport = nil
+        syncProgressBar()
     }
 
     private func handleProgressReport(_ report: Terminal.ProgressReport) {
         if report.state == .remove {
             clearProgressReport()
         } else {
-            progressBarView?.apply(state: report.state, progress: report.progress)
+            liveProgressReport = report
+            syncProgressBar()
             resetProgressReportTimer()
         }
         terminalDelegate?.progressReport(source: self, report: report)
+    }
+
+    /// Brings the bar in line with the live report and ``showsProgressBar`` —
+    /// the one place either of them reaches the bar view, so a host that turns
+    /// the bar off cannot be talked back into it by the next report.
+    private func syncProgressBar() {
+        guard showsProgressBar, let liveProgressReport else {
+            progressBarView?.apply(state: .remove, progress: nil)
+            return
+        }
+        progressBarView?.apply(state: liveProgressReport.state, progress: liveProgressReport.progress)
     }
 
     /// Ends a bar the application started and never removed.
@@ -1724,6 +1739,20 @@ open class TerminalView: UIScrollView, UITextInputTraits, UIKeyInput, UIScrollVi
     public var progressBarColor: UIColor? {
         get { progressBarView?.tint }
         set { progressBarView?.tint = newValue }
+    }
+
+    /// Controls whether the view draws the OSC 9;4 progress bar itself.
+    ///
+    /// The reports reach ``TerminalViewDelegate/progressReport(source:report:)``
+    /// either way, so a host that draws progress in its own chrome turns the
+    /// built-in bar off without losing what it draws from. While this is
+    /// `false` no report brings the bar back; setting it to `true` again
+    /// restores it, and a report still live comes back with it.
+    public var showsProgressBar: Bool = true {
+        didSet {
+            guard showsProgressBar != oldValue else { return }
+            syncProgressBar()
+        }
     }
     
     /// Controls weather to use high ansi colors, if false terminal will use bold text instead of high ansi colors
