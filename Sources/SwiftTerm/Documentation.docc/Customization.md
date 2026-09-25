@@ -312,3 +312,25 @@ existing delegate.
 that uses it implements the same two methods on
 ``LocalProcessTerminalViewDelegate`` instead; the view forwards them, and they
 are defaulted there too.
+
+## Drawing the Progress Bar Yourself
+
+When a program reports progress with OSC 9;4, ``TerminalView`` draws a thin bar
+across the terminal's first line, which is the only place it can go. A host that
+wants progress in its own chrome — a toolbar, a status footer, a tab — turns the
+built-in bar off and draws from the reports it already receives:
+
+```swift
+terminalView.showsProgressBar = false
+```
+
+Draw from ``TerminalViewDelegate/progressReport(source:report:)``, or from
+``LocalProcessTerminalViewDelegate/progressReport(source:report:)`` where the
+host uses ``LocalProcessTerminalView``. Those carry what the application sent
+and the removals the view makes on its own; a bar drawn from raw OSC input
+never hears the silence timer expire a report, or the view close on one, and
+stays busy with nothing behind it.
+
+The reports keep arriving either way; only the drawing stops. While it is off no
+report brings the bar back, and setting it to `true` again restores it — with the
+report still running, if there is one.
