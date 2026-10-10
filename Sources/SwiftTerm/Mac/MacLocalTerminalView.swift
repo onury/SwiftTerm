@@ -52,9 +52,6 @@ public protocol LocalProcessTerminalViewDelegate: AnyObject {
     /// Reports a launch failure, separate from child exit.
     func processFailedToStart(source: TerminalView, error: LocalProcessError)
 
-    /// Receives the current OSC 7501 records on the main actor.
-    func programStatusChanged(source: TerminalView, records: [TerminalProgramStatus])
-
     // MARK: Session signals
     //
     // ``LocalProcessTerminalView`` is its own ``TerminalViewDelegate``, so the
@@ -77,6 +74,9 @@ public protocol LocalProcessTerminalViewDelegate: AnyObject {
     ///
     /// See ``TerminalViewDelegate/bell(source:)``.
     func bell(source: TerminalView)
+
+    /// Receives the current OSC 7501 records on the main actor.
+    func programStatusChanged(source: TerminalView, records: [TerminalProgramStatus])
 
     // MARK: Kitty clipboard protocol, OSC 5522
     //
@@ -393,6 +393,7 @@ open class LocalProcessTerminalView: TerminalView, TerminalViewDelegate {
 
     open func notification(source: TerminalView, title: String, body: String) {
         processDelegate?.notification(source: source, title: title, body: body)
+    }
 
     /// The view is its own `terminalDelegate`, so the bell would otherwise
     /// stop at the protocol's default beep with no way for the host to hear
