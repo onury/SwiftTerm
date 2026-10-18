@@ -4829,6 +4829,33 @@ extension TerminalView {
     }
     
     
+    /// The row of the displayed buffer at the top of the screen, counted from
+    /// the first row of the scrollback (0), read under the terminal's lock.
+    /// With `rowsText(_:)` it lets a host anchor something to a line of the
+    /// scrollback (a bookmark, a reply to a line) and find it again after the
+    /// view scrolls.
+    public var viewportTopRow: Int {
+        withTerminal { $0.displayBuffer.yDisp }
+    }
+
+    /// The text of rows of the displayed buffer, by row counted from the first
+    /// row of the scrollback, each with its trailing blanks trimmed, read under
+    /// the terminal's lock; a row outside the buffer is left out.
+    public func rowsText(_ rows: Range<Int>) -> [String] {
+        withTerminal { terminal in
+            let lines = terminal.displayBuffer.lines
+            return rows.compactMap { row in
+                row >= 0 && row < lines.count ? lines[row].translateToString(trimRight: true) : nil
+            }
+        }
+    }
+
+    /// Whether the program in the terminal asked for bracketed paste, so a
+    /// host typing text into it can wrap the text the way a paste is wrapped.
+    public var isBracketedPasteMode: Bool {
+        withTerminal { $0.bracketedPasteMode }
+    }
+
     /// Returns the contents of the selection, if active, or nil otherwise
     public func getSelection () -> String?
     {
