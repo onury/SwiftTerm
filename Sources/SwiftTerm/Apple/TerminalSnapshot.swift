@@ -477,7 +477,7 @@ final class TerminalSnapshot {
                   search: SearchService? = nil,
                   deferBidiTypesetting: Bool = false) -> RefreshResult {
         terminal.terminalLock.preconditionLocked()
-        guard !terminal.synchronizedOutputActive else {
+        guard !terminal.synchronizedOutputActive, !terminal.displayHeld else {
             return .frozen
         }
 
