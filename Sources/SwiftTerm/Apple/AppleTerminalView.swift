@@ -4856,6 +4856,27 @@ extension TerminalView {
         }
     }
 
+    /// The cells of rows of the displayed buffer, by row counted from the
+    /// first row of the scrollback: each one's character (a blank for a cell
+    /// no program wrote, nothing for the second half of a wide one) and its
+    /// background, read under the terminal's lock. A program that draws its
+    /// own selection paints it as a background, and this is how a host reads
+    /// what it selected.
+    public func rowsCells(_ rows: Range<Int>) -> [[(character: String, background: Attribute.Color)]] {
+        withTerminal { terminal in
+            let lines = terminal.displayBuffer.lines
+            return rows.compactMap { row in
+                guard row >= 0 && row < lines.count else { return nil }
+                let line = lines[row]
+                return (0..<line.count).map { column in
+                    let cell = line[column]
+                    let character = cell.code == 0 ? (cell.width == 0 ? "" : " ") : String(cell.getCharacter())
+                    return (character, cell.attribute.bg)
+                }
+            }
+        }
+    }
+
     /// Whether the program in the terminal asked for bracketed paste, so a
     /// host typing text into it can wrap the text the way a paste is wrapped.
     public var isBracketedPasteMode: Bool {
