@@ -4983,7 +4983,13 @@ extension TerminalView {
         withTerminal { terminal in
             let lines = terminal.displayBuffer.lines
             return rows.compactMap { row in
-                row >= 0 && row < lines.count ? lines[row].translateToString(trimRight: true) : nil
+                guard row >= 0 && row < lines.count else { return nil }
+                // A cell no program wrote (a full-screen program moves the
+                // cursor over blanks rather than writing them) reads as the
+                // blank it shows, not as nothing, so words keep their spaces.
+                return lines[row].translateToString(
+                    trimRight: true, skipNullCellsFollowingWide: true,
+                    characterProvider: { $0.code == 0 ? " " : $0.getCharacter() })
             }
         }
     }
