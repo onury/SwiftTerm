@@ -4994,6 +4994,38 @@ extension TerminalView {
         withTerminal { $0.bracketedPasteMode }
     }
 
+    /// Whether the terminal shows the alternate screen, the one a program
+    /// that owns the screen draws on and that keeps no scrollback.
+    public var isShowingAlternateBuffer: Bool {
+        withTerminal { $0.isDisplayBufferAlternate }
+    }
+
+    #if os(macOS)
+    /// Scrolls by whole lines the way the wheel does, routed as the wheel is
+    /// routed: a wheel report to a program that asked for the mouse, cursor
+    /// keys to one on the alternate screen that asked for those, else the
+    /// scrollback. A host uses it to bring a line back into view in a screen
+    /// a program owns, where the scrollback cannot reach.
+    public func scrollAsWheel(up: Bool, lines: Int) {
+        guard lines > 0 else { return }
+        let mouse = withTerminal { allowMouseReporting && $0.mouseMode != .off }
+        if mouse {
+            withTerminal { terminal in
+                let flags = terminal.encodeButton(button: up ? 4 : 5, release: false, shift: false, meta: false, control: false)
+                let row = terminal.displayBuffer.rows / 2
+                for _ in 0..<lines { terminal.sendEvent(buttonFlags: flags, x: 0, y: row) }
+            }
+        } else if withTerminal({ $0.isDisplayBufferAlternate }) {
+            guard withTerminal({ $0.alternateScrollMode }) else { return }
+            for _ in 0..<lines { up ? sendKeyUp() : sendKeyDown() }
+        } else if up {
+            scrollUp(lines: lines)
+        } else {
+            scrollDown(lines: lines)
+        }
+    }
+    #endif
+
     /// Returns the contents of the selection, if active, or nil otherwise
     public func getSelection () -> String?
     {
