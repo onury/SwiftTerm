@@ -4381,7 +4381,9 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
     /// route: travel that was reported to the application never scrolls locally when Option
     /// arrives, and locally scrolled travel never becomes a report when Option lifts.
     private var scrollAccumulator = WheelDistanceAccumulator<WheelRoute>()
-    private var wheelReportBudget = WheelReportBudget()
+    /// Shared with the host's ``scrollAsWheel(up:lines:)``, so the reports it
+    /// sends spend the same allowance as the wheel's own.
+    var wheelReportBudget = WheelReportBudget()
 
     /// Why this wheel event belongs to SwiftTerm. Keeping bypass and alternate-scroll decisions
     /// distinct prevents a modifier intended for local handling from becoming cursor-key input.

@@ -4868,29 +4868,46 @@ extension TerminalView {
         withTerminal { $0.isDisplayBufferAlternate }
     }
 
+    /// Whether the program holds the display for a synchronized update
+    /// (DECSET 2026): the rows read now may be half old, half new.
+    public var isSynchronizedOutputActive: Bool {
+        withTerminal { $0.synchronizedOutputActive }
+    }
+
     #if os(macOS)
     /// Scrolls by whole lines the way the wheel does, routed as the wheel is
     /// routed: a wheel report to a program that asked for the mouse, cursor
     /// keys to one on the alternate screen that asked for those, else the
-    /// scrollback. A host uses it to bring a line back into view in a screen
-    /// a program owns, where the scrollback cannot reach.
-    public func scrollAsWheel(up: Bool, lines: Int) {
-        guard lines > 0 else { return }
+    /// scrollback. Reports and keys spend the wheel's own allowance (six at
+    /// once, a hundred a second), so a host cannot flood the program; the
+    /// return says how many went. A host uses it to bring a line back into
+    /// view in a screen a program owns, where the scrollback cannot reach.
+    @discardableResult
+    public func scrollAsWheel(up: Bool, lines: Int) -> Int {
+        guard lines > 0 else { return 0 }
         let mouse = withTerminal { allowMouseReporting && $0.mouseMode != .off }
         if mouse {
+            let granted = wheelReportBudget.grant(lines)
+            let cellHeight = Int(cellDimension.height.rounded())
             withTerminal { terminal in
                 let flags = terminal.encodeButton(button: up ? 4 : 5, release: false, shift: false, meta: false, control: false)
                 let row = terminal.displayBuffer.rows / 2
-                for _ in 0..<lines { terminal.sendEvent(buttonFlags: flags, x: 0, y: row) }
+                for _ in 0..<granted {
+                    terminal.sendEvent(buttonFlags: flags, x: 0, y: row, pixelX: 0, pixelY: row * cellHeight)
+                }
             }
+            return granted
         } else if withTerminal({ $0.isDisplayBufferAlternate }) {
-            guard withTerminal({ $0.alternateScrollMode }) else { return }
-            for _ in 0..<lines { up ? sendKeyUp() : sendKeyDown() }
+            guard withTerminal({ $0.alternateScrollMode }) else { return 0 }
+            let granted = wheelReportBudget.grant(lines)
+            for _ in 0..<granted { up ? sendKeyUp() : sendKeyDown() }
+            return granted
         } else if up {
             scrollUp(lines: lines)
         } else {
             scrollDown(lines: lines)
         }
+        return lines
     }
     #endif
 
