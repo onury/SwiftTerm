@@ -4874,6 +4874,17 @@ extension TerminalView {
         withTerminal { $0.synchronizedOutputActive }
     }
 
+    /// Keeps the display on the last frame drawn while output goes on being
+    /// parsed, for the host to pin something to a row; clearing it draws what
+    /// was held back.
+    public var holdsDisplay: Bool {
+        get { withTerminal { $0.displayHeld } }
+        set {
+            withTerminal { $0.displayHeld = newValue }
+            if !newValue { frameDriver.markDirty() }
+        }
+    }
+
     #if os(macOS)
     /// Scrolls by whole lines the way the wheel does, routed as the wheel is
     /// routed: a wheel report to a program that asked for the mouse, cursor

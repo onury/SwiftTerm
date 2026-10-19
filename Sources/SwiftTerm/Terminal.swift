@@ -587,6 +587,11 @@ open class Terminal {
     /// fixed 1 s.
     var synchronizedOutputTimeoutSeconds: Double = 1.0
     public private(set) var synchronizedOutputActive: Bool = false
+    /// Set by the host to keep the display on the last frame drawn while
+    /// output goes on being parsed (a popover pinned to a row, say); the
+    /// frames held back draw as one when it is cleared. Read and written
+    /// under `terminalLock`, as `synchronizedOutputActive` is.
+    public var displayHeld: Bool = false
     private(set) var synchronizedOutputGeneration: UInt64 = 0
     private var synchronizedOutputWatchdogDirty = false
 #if !SWIFTTERM_EMBEDDED
