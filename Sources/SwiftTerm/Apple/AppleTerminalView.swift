@@ -4877,6 +4877,26 @@ extension TerminalView {
         }
     }
 
+    /// The link on a cell of the displayed buffer, its row counted from the
+    /// first row of the scrollback: an OSC 8 hyperlink's target, else a URL
+    /// or path the terminal spots in the text, whatever the hover mode, read
+    /// under the terminal's lock. For a host's own menu to offer what a
+    /// Command-click would open.
+    public func link(atRow row: Int, column: Int) -> String? {
+        withTerminal { terminal in
+            let position = Position(col: column, row: row)
+            guard let match = terminal.linkMatch(at: .buffer(position), mode: .explicitAndImplicit) else {
+                return nil
+            }
+            if match.isExplicit,
+               let payload = payloadStringLocked(at: position),
+               let (url, _) = urlAndParamsFrom(payload: payload) {
+                return url
+            }
+            return match.text
+        }
+    }
+
     /// Whether the program in the terminal asked for bracketed paste, so a
     /// host typing text into it can wrap the text the way a paste is wrapped.
     public var isBracketedPasteMode: Bool {
