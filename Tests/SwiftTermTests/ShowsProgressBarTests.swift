@@ -105,7 +105,7 @@ struct ShowsProgressBarTests {
 
         view.feed(text: "\u{1b}]9;4;1;40\u{07}")
         await settle { !delegate.reports.isEmpty }
-        view.expireProgressReport()
+        view.endProgressReport()
 
         #expect(delegate.reports.count == 2)
         #expect(delegate.reports.last?.state == .remove)
@@ -125,7 +125,7 @@ struct ShowsProgressBarTests {
         await settle { !first.reports.isEmpty }
 
         view.terminalDelegate = nil
-        view.expireProgressReport()
+        view.endProgressReport()
 
         let second = HostDelegate()
         view.terminalDelegate = second

@@ -490,23 +490,19 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
     private var markedTextStorage: NSAttributedString?
     private var markedSelectedRange: NSRange = NSRange(location: NSNotFound, length: 0)
     private var markedTextOverlay: DictationOverlayTextView?
-    private var progressBarView: TerminalProgressBarView?
-    /// Internal rather than private so a test can stand in for a host that
-    /// has the silence clear off.
-    var progressReportTimer: Timer?
-    /// The report the application has up and has not removed — what a host
-    /// mirroring the session is showing. Kept apart from `progressReportTimer`,
-    /// which only exists while the silence clear is armed: a teardown owes the
-    /// host a removal for the report, whether or not a timer is running.
-    /// It is also what the bar is drawn from, or would be if
-    /// ``showsProgressBar`` let it.
-    private var liveProgressReport: Terminal.ProgressReport?
-    private enum UIShutdownState {
+    private(set) var progressBarView: TerminalProgressBarView?
+    private(set) var progressReportTimer: Timer?
+    var schedulesProgressReportTimer = true
+    /// The OSC 9;4 report the application has up and has not removed, or `nil`
+    /// when none is live: what a host mirroring the session should show. A
+    /// delegate attached while a report is live reads it here.
+    public internal(set) var currentProgressReport: Terminal.ProgressReport?
+    enum UIShutdownState {
         case active
         case stopping
         case stopped
     }
-    private var uiShutdownState = UIShutdownState.active
+    private(set) var uiShutdownState = UIShutdownState.active
 
     /// Tracks the selection state of the terminal, and can be used to set it
     /// programmatically (see `SelectionService`).
@@ -1117,79 +1113,42 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
     /// a wait that is already running.
     public var progressReportTimeout: TimeInterval? = TerminalView.defaultProgressReportTimeout {
         didSet {
-            guard progressBarView?.isHidden == false else { return }
+            guard currentProgressReport != nil else { return }
             resetProgressReportTimer()
         }
     }
 
     @MainActor
-    private func resetProgressReportTimer() {
-        progressReportTimer?.invalidate()
-        progressReportTimer = nil
+    func resetProgressReportTimer() {
+        cancelProgressReportTimer()
         guard let progressReportTimeout else { return }
-        progressReportTimer = Timer.scheduledTimer(withTimeInterval: progressReportTimeout, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: progressReportTimeout, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.expireProgressReport()
+                self?.endProgressReport()
             }
         }
+        if schedulesProgressReportTimer {
+            RunLoop.current.add(timer, forMode: .default)
+        }
+        progressReportTimer = timer
     }
 
     @MainActor
-    private func clearProgressReport() {
+    func cancelProgressReportTimer() {
         progressReportTimer?.invalidate()
         progressReportTimer = nil
-        liveProgressReport = nil
-        syncProgressBar()
-    }
-
-    @MainActor
-    private func handleProgressReport(_ report: Terminal.ProgressReport) {
-        if report.state == .remove {
-            clearProgressReport()
-        } else {
-            liveProgressReport = report
-            syncProgressBar()
-            resetProgressReportTimer()
-        }
-        terminalDelegate?.progressReport(source: self, report: report)
-    }
-
-    /// Ends a bar the application started and never removed.
-    ///
-    /// Routed through `handleProgressReport` rather than straight to
-    /// `clearProgressReport` so the host hears the silence as the removal it
-    /// stands for: a delegate that mirrors the bar's state would otherwise sit
-    /// on `set` forever.
-    @MainActor
-    func expireProgressReport() {
-        handleProgressReport(Terminal.ProgressReport(state: .remove, progress: nil))
-    }
-
-    /// Ends a live report when the view is torn down.
-    ///
-    /// A host that heard a `set` has to hear the matching `remove`, or it stays
-    /// busy after the session it was mirroring is gone. So the closing view
-    /// reports the removal while a report is live, and only clears its own
-    /// state when there is nothing to report.
-    @MainActor
-    private func shutdownProgressReport() {
-        if liveProgressReport != nil {
-            expireProgressReport()
-        } else {
-            clearProgressReport()
-        }
     }
 
     /// Brings the bar in line with the live report and ``showsProgressBar`` —
     /// the one place either of them reaches the bar view, so a host that turns
     /// the bar off cannot be talked back into it by the next report.
     @MainActor
-    private func syncProgressBar() {
-        guard showsProgressBar, let liveProgressReport else {
+    func syncProgressBar() {
+        guard showsProgressBar, let currentProgressReport else {
             progressBarView?.apply(state: .remove, progress: nil)
             return
         }
-        progressBarView?.apply(state: liveProgressReport.state, progress: liveProgressReport.progress)
+        progressBarView?.apply(state: currentProgressReport.state, progress: currentProgressReport.progress)
     }
 
     /// Controls whether the view draws the OSC 9;4 progress bar itself.
@@ -1233,11 +1192,12 @@ open class TerminalView: NSView, NSUserInterfaceValidations, TerminalDelegate {
         stopWindowMouseMovedFallback()
         stopFocusNotifications()
         stopTextBlinking()
-        shutdownProgressReport()
+        let owesProgressRemoval = shutdownProgressReport()
         overlayScrollerHideTimer?.invalidate()
         overlayScrollerHideTimer = nil
         renderOwner.invalidateSynchronizedOutputWatchdog()
         uiShutdownState = .stopped
+        if owesProgressRemoval { reportClosedProgressRemoval() }
         return true
     }
     
